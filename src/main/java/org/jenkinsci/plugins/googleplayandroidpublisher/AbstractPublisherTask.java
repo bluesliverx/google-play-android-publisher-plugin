@@ -2,7 +2,7 @@ package org.jenkinsci.plugins.googleplayandroidpublisher;
 
 import com.google.api.services.androidpublisher.AndroidPublisher;
 import com.google.jenkins.plugins.credentials.oauth.GoogleRobotCredentials;
-import hudson.model.BuildListener;
+import hudson.model.TaskListener;
 import hudson.remoting.Callable;
 
 import java.io.IOException;
@@ -11,14 +11,14 @@ import java.security.GeneralSecurityException;
 
 public abstract class AbstractPublisherTask<V> implements Callable<V, UploadException> {
 
-    private final BuildListener listener;
+    private final TaskListener listener;
     private final GoogleRobotCredentials credentials;
     private final String pluginVersion;
     protected AndroidPublisher.Edits editService;
     protected String editId;
     protected PrintStream logger;
 
-    AbstractPublisherTask(BuildListener listener, GoogleRobotCredentials credentials) {
+    AbstractPublisherTask(TaskListener listener, GoogleRobotCredentials credentials) {
         this.listener = listener;
         this.credentials = credentials;
         this.pluginVersion = Util.getPluginVersion();

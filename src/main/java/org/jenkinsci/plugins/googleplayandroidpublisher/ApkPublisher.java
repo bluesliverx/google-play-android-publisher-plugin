@@ -4,14 +4,11 @@ import com.google.jenkins.plugins.credentials.oauth.GoogleRobotCredentials;
 import hudson.Extension;
 import hudson.FilePath;
 import hudson.Launcher;
-import hudson.model.AbstractBuild;
-import hudson.model.AbstractDescribableImpl;
-import hudson.model.BuildListener;
-import hudson.model.Descriptor;
-import hudson.model.Result;
+import hudson.model.*;
 import hudson.tasks.Publisher;
 import hudson.util.ComboBoxModel;
 import hudson.util.FormValidation;
+import jenkins.tasks.SimpleBuildStep;
 import net.dongliu.apk.parser.exception.ParserException;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
@@ -51,7 +48,7 @@ import static org.jenkinsci.plugins.googleplayandroidpublisher.Util.getPublisher
 import static org.jenkinsci.plugins.googleplayandroidpublisher.Util.getVersionCode;
 
 /** Uploads Android application files to the Google Play Developer Console. */
-public class ApkPublisher extends GooglePlayPublisher {
+public class ApkPublisher extends GooglePlayPublisher implements SimpleBuildStep {
 
     @DataBoundSetter
     private String apkFilesPattern;
@@ -171,14 +168,11 @@ public class ApkPublisher extends GooglePlayPublisher {
         return errors.isEmpty();
     }
 
-    @Override
-    public boolean perform(AbstractBuild build, Launcher launcher,
-            BuildListener listener) throws IOException, InterruptedException {
-        super.perform(build, launcher, listener);
-        PrintStream logger = listener.getLogger();
+    private boolean performInternal(Run<?, ?> run, FilePath workspace, TaskListener taskListener) throws InterruptedException, IOException {
+        PrintStream logger = taskListener.getLogger();
 
         // Check whether we should execute at all
-        final Result buildResult = build.getResult();
+        final Result buildResult = run.getResult();
         if (buildResult != null && buildResult.isWorseThan(Result.UNSTABLE)) {
             logger.println("Skipping upload to Google Play due to build result");
             return true;
@@ -186,13 +180,13 @@ public class ApkPublisher extends GooglePlayPublisher {
 
         // Check that the job has been configured correctly
         if (!isConfigValid(logger)) {
+            logger.println("Skipping upload to Google Play due to invalid configuration");
             return false;
         }
 
         // Find the APK filename(s) which match the pattern after variable expansion
         final String filesPattern = getExpandedApkFilesPattern();
-        final FilePath ws = build.getWorkspace();
-        List<String> relativePaths = ws.act(new FindFilesTask(filesPattern));
+        List<String> relativePaths = workspace.act(new FindFilesTask(filesPattern));
         if (relativePaths.isEmpty()) {
             logger.println(String.format("No APK files matching the pattern '%s' could be found", filesPattern));
             return false;
@@ -203,7 +197,7 @@ public class ApkPublisher extends GooglePlayPublisher {
         final Set<String> applicationIds = new HashSet<String>();
         final Set<Integer> versionCodes = new TreeSet<Integer>();
         for (String path : relativePaths) {
-            FilePath apk = ws.child(path);
+            FilePath apk = workspace.child(path);
             try {
                 applicationIds.add(getApplicationId(apk));
                 versionCodes.add(getVersionCode(apk));
@@ -240,11 +234,11 @@ public class ApkPublisher extends GooglePlayPublisher {
         final Map<Integer, ExpansionFileSet> expansionFiles = new TreeMap<Integer, ExpansionFileSet>();
         final String expansionPattern = getExpandedExpansionFilesPattern();
         if (expansionPattern != null) {
-            List<String> expansionPaths = ws.act(new FindFilesTask(expansionPattern));
+            List<String> expansionPaths = workspace.act(new FindFilesTask(expansionPattern));
 
             // Check that the expansion files found apply to the APKs to be uploaded
             for (String path : expansionPaths) {
-                FilePath file = ws.child(path);
+                FilePath file = workspace.child(path);
 
                 // Check that the filename is in the right format
                 Matcher matcher = OBB_FILE_REGEX.matcher(file.getName());
@@ -299,8 +293,8 @@ public class ApkPublisher extends GooglePlayPublisher {
         // Upload the file(s) from the workspace
         try {
             GoogleRobotCredentials credentials = getCredentialsHandler().getServiceAccountCredentials();
-            return build.getWorkspace()
-                    .act(new ApkUploadTask(listener, credentials, applicationId, ws, apkFiles, expansionFiles,
+            return workspace
+                    .act(new ApkUploadTask(taskListener, credentials, applicationId, workspace, apkFiles, expansionFiles,
                             usePreviousExpansionFilesIfMissing, fromConfigValue(getCanonicalTrackName()),
                             getRolloutPercentageValue(), getExpandedRecentChangesList()));
         } catch (UploadException e) {
@@ -308,6 +302,23 @@ public class ApkPublisher extends GooglePlayPublisher {
             logger.println("- No changes have been applied to the Google Play account");
         }
         return false;
+    }
+
+    @Override
+    public void perform(Run<?, ?> run, FilePath workspace, Launcher launcher, TaskListener taskListener) throws InterruptedException, IOException {
+        // Set these manually since the GooglePlayPublisher constructor is not run in this case
+        currentRun.set(run);
+        currentListener.set(taskListener);
+        if (!performInternal(run, workspace, taskListener)) {
+            run.setResult(Result.FAILURE);
+        }
+    }
+
+    @Override
+    public boolean perform(AbstractBuild build, Launcher launcher,
+            BuildListener listener) throws IOException, InterruptedException {
+        super.perform(build, launcher, listener);
+        return performInternal(build, build.getWorkspace(), listener);
     }
 
     static final class ExpansionFileSet implements Serializable {

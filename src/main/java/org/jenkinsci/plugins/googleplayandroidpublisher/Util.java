@@ -6,6 +6,7 @@ import com.google.common.base.Throwables;
 import com.google.jenkins.plugins.credentials.oauth.GoogleRobotCredentials;
 import hudson.FilePath;
 import hudson.model.AbstractBuild;
+import hudson.model.Run;
 import hudson.model.TaskListener;
 import hudson.remoting.VirtualChannel;
 import jenkins.model.Jenkins;
@@ -73,10 +74,18 @@ public class Util {
     }
 
     /** @return The given value with variables expanded and trimmed; {@code null} if that results in an empty string. */
-    static String expand(AbstractBuild build, TaskListener listener, String value)
+    static String expand(Run<?, ?> run, TaskListener listener, String value)
             throws InterruptedException, IOException {
+        // Check if the build is for a workflow/pipeline job.  If it is, we don't need to expand
+        //  much since this should happen in the groovy pipeline script itself.
+        if (!(run instanceof AbstractBuild)) {
+            return fixEmptyAndTrim(run.getEnvironment(listener).expand(value));
+        }
+
+        // Else expand everything we can as before
+        final AbstractBuild build = (AbstractBuild) run;
         if (Jenkins.getInstance().getPlugin("token-macro") == null) {
-            String s = build.getEnvironment(listener).expand(value);
+            String s = run.getEnvironment(listener).expand(value);
             return fixEmptyAndTrim(replaceMacro(s, build.getBuildVariableResolver()));
         }
 

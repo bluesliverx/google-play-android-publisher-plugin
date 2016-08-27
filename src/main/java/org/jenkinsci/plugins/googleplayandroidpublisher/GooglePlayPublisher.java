@@ -4,6 +4,7 @@ import com.google.jenkins.plugins.credentials.domains.RequiresDomain;
 import hudson.Launcher;
 import hudson.model.AbstractBuild;
 import hudson.model.BuildListener;
+import hudson.model.Run;
 import hudson.model.TaskListener;
 import hudson.tasks.BuildStepMonitor;
 import hudson.tasks.Recorder;
@@ -14,7 +15,7 @@ import java.io.IOException;
 @RequiresDomain(value = AndroidPublisherScopeRequirement.class)
 public abstract class GooglePlayPublisher extends Recorder {
 
-    protected static transient final ThreadLocal<AbstractBuild> currentBuild = new ThreadLocal<AbstractBuild>();
+    protected static transient final ThreadLocal<Run<?, ?>> currentRun = new ThreadLocal<Run<?, ?>>();
     protected static transient final ThreadLocal<TaskListener> currentListener = new ThreadLocal<TaskListener>();
 
     private transient CredentialsHandler credentialsHandler;
@@ -29,7 +30,7 @@ public abstract class GooglePlayPublisher extends Recorder {
     @Override
     public boolean perform(AbstractBuild<?, ?> build, Launcher launcher,
             BuildListener listener) throws InterruptedException, IOException {
-        currentBuild.set(build);
+        currentRun.set(build);
         currentListener.set(listener);
         return true;
     }
@@ -43,7 +44,7 @@ public abstract class GooglePlayPublisher extends Recorder {
 
     /** @return An expanded value, using the build and environment variables, plus token macro expansion. */
     protected String expand(String value) throws IOException, InterruptedException {
-        return Util.expand(currentBuild.get(), currentListener.get(), value);
+        return Util.expand(currentRun.get(), currentListener.get(), value);
     }
 
     public BuildStepMonitor getRequiredMonitorService() {

@@ -9,7 +9,7 @@ import com.google.api.services.androidpublisher.model.ExpansionFile;
 import com.google.api.services.androidpublisher.model.ExpansionFilesUploadResponse;
 import com.google.jenkins.plugins.credentials.oauth.GoogleRobotCredentials;
 import hudson.FilePath;
-import hudson.model.BuildListener;
+import hudson.model.TaskListener;
 import net.dongliu.apk.parser.bean.ApkMeta;
 import org.apache.commons.codec.digest.DigestUtils;
 
@@ -42,7 +42,7 @@ class ApkUploadTask extends TrackPublisherTask<Boolean> {
     private int latestMainExpansionFileVersionCode;
     private int latestPatchExpansionFileVersionCode;
 
-    ApkUploadTask(BuildListener listener, GoogleRobotCredentials credentials, String applicationId,
+    ApkUploadTask(TaskListener listener, GoogleRobotCredentials credentials, String applicationId,
             FilePath workspace, List<FilePath> apkFiles, Map<Integer, ExpansionFileSet> expansionFiles,
             boolean usePreviousExpansionFilesIfMissing, ReleaseTrack track, double rolloutPercentage,
             ApkPublisher.RecentChanges[] recentChangeList) {
